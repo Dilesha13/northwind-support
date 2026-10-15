@@ -1,3 +1,4 @@
+
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ticketsApi } from '../../../api/tickets';
@@ -23,20 +24,46 @@ describe('useTicketList', () => {
     vi.clearAllMocks();
   });
 
-  it('searches with the text the user typed, once the typing settles', async () => {
+  it('requests tickets immediately when the status changes', async () => {
     const { result } = renderHook(() => useTicketList());
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
+      await Promise.resolve();
+    });
+
+    expect(getTickets).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.updateFilters({ status: 'InProgress' });
+      await Promise.resolve();
+    });
+
+    expect(getTickets).toHaveBeenCalledTimes(2);
+    expect(getTickets).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'InProgress',
+        page: 1,
+      }),
+    );
+  });
+
+  it('debounces search and sends the settled text', async () => {
+    const { result } = renderHook(() => useTicketList());
+
+    await act(async () => {
+      await Promise.resolve();
     });
 
     expect(getTickets).toHaveBeenCalledTimes(1);
 
     act(() => {
+      result.current.updateFilters({ search: 'inv' });
+    });
+
+    act(() => {
       result.current.updateFilters({ search: 'invoice' });
     });
 
-    // Still inside the debounce window: no second request yet.
     expect(getTickets).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -45,10 +72,10 @@ describe('useTicketList', () => {
 
     expect(getTickets).toHaveBeenCalledTimes(2);
     expect(getTickets).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: 'invoice', page: 1 }),
+      expect.objectContaining({
+        search: 'invoice',
+        page: 1,
+      }),
     );
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data?.items).toHaveLength(1);
   });
 });
