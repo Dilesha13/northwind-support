@@ -23,9 +23,56 @@ public sealed class TicketQueries(SupportDbContext db, IClock clock) : ITicketQu
     /// </remarks>
     public async Task<PagedResult<TicketListItemDto>> GetPagedAsync(TicketQuery query, CancellationToken ct)
     {
+
         var tickets = TicketsWithLabels();
 
+        // Search across ticket title, reference, and customer name.
+        // Trim whitespace and ignore an empty search.
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+
+            tickets = tickets.Where(x =>
+                x.Ticket.Title.Contains(search) ||
+                x.Ticket.Reference.Contains(search) ||
+                x.Customer.Name.Contains(search));
+        }
+
+        // Apply exact-match filters. Multiple filters are combined with AND.
+        if (query.Status.HasValue)
+        {
+            tickets = tickets.Where(x => x.Ticket.Status == query.Status.Value);
+        }
+
+        if (query.Priority.HasValue)
+        {
+            tickets = tickets.Where(x => x.Ticket.Priority == query.Priority.Value);
+        }
+
+        if (query.CategoryId.HasValue)
+        {
+            tickets = tickets.Where(x => x.Ticket.CategoryId == query.CategoryId.Value);
+        }
+
+        if (query.CustomerId.HasValue)
+        {
+            tickets = tickets.Where(x => x.Ticket.CustomerId == query.CustomerId.Value);
+        }
+
+        if (query.AssignedAgentId.HasValue)
+        {
+            tickets = tickets.Where(
+                x => x.Ticket.AssignedAgentId == query.AssignedAgentId.Value);
+        }
+
+        if (query.UnassignedOnly)
+        {
+            tickets = tickets.Where(x => x.Ticket.AssignedAgentId == null);
+        }
+
+        // Count the filtered results, not all tickets.
         var totalCount = await tickets.CountAsync(ct);
+
 
         var now = clock.UtcNow;
 
